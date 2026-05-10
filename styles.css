@@ -138,11 +138,19 @@ a:hover { text-decoration-style: solid; }
   line-height: 1.05;
   letter-spacing: 0;
   white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
   display: block;
   overflow-x: auto;
   padding: 0.4em 0;
 }
-.banner.compact { font-size: clamp(11px, 2.4vw, 16px); }
+.banner.compact {
+  font-size: clamp(13px, 3vw, 18px);
+  letter-spacing: 0.08em;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+}
 
 .kv { display: grid; grid-template-columns: max-content 1fr; column-gap: 1.25em; row-gap: 0.15em; }
 .kv > .k { color: var(--accent); }

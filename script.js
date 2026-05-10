@@ -773,13 +773,35 @@
   });
 
   // ---------- Banner / boot ----------
+  const NARROW_BREAKPOINT = 720;
+  let lastBannerEl = null;
+
+  function shouldUseCompactBanner() {
+    return window.innerWidth < NARROW_BREAKPOINT;
+  }
+
   function printBanner() {
-    const isNarrow = window.innerWidth < 560;
+    const isNarrow = shouldUseCompactBanner();
     const bannerEl = el("pre", { cls: "banner" + (isNarrow ? " compact" : "") });
     bannerEl.textContent = isNarrow ? BANNER_COMPACT : BANNER_FULL;
     appendNode(bannerEl);
+    lastBannerEl = bannerEl;
     return Promise.resolve();
   }
+
+  // Re-render the most recent banner on resize / rotation so the layout stays sane.
+  let bannerResizeTimer = null;
+  window.addEventListener("resize", () => {
+    if (!lastBannerEl || !lastBannerEl.isConnected) return;
+    clearTimeout(bannerResizeTimer);
+    bannerResizeTimer = setTimeout(() => {
+      const isNarrow = shouldUseCompactBanner();
+      const wantsCompact = lastBannerEl.classList.contains("compact");
+      if (isNarrow === wantsCompact) return;
+      lastBannerEl.classList.toggle("compact", isNarrow);
+      lastBannerEl.textContent = isNarrow ? BANNER_COMPACT : BANNER_FULL;
+    }, 120);
+  });
 
   async function bootSequence() {
     await typeLines([
