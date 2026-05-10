@@ -1,0 +1,64 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+
+# Logs & runtime
+logs/
+*.log
+pids/
+*.pid
+*.seed
+
+# Build & cache output
+dist/
+build/
+.cache/
+.parcel-cache/
+.tmp/
+.vercel/
+.wrangler/
+.dev.vars
+
+# Local dev tooling
+.claude/
+.cursor/
+.aider*
+.playwright-mcp/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# Iteration screenshots (not referenced by the site)
+firefox_*.gif
+firefox_*.mp4
+*.webm
+screenshot_*.png
+screenshot_*.jpg
+amber.png
+boot.png
+
+# Local-only scratch
+_scratch/
+_scratch*

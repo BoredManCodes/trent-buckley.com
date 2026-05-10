@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>trent-buckley.com</title>
+<meta name="description" content="Trent Buckley - self-taught developer, maker, and lifelong tinkerer. Interactive terminal portfolio." />
+<meta name="author" content="Trent Buckley" />
+<meta name="theme-color" content="#050807" />
+<meta property="og:title" content="trent-buckley.com" />
+<meta property="og:description" content="Self-taught developer and lifelong tinkerer. Type a command to explore." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%23050807'/%3E%3Cpath d='M14 22 L22 30 L14 38' fill='none' stroke='%234afa7b' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='28' y='36' width='22' height='4' fill='%234afa7b'/%3E%3C/svg%3E" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="crt">
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+    <main id="terminal" class="terminal" aria-label="Interactive terminal">
+      <div id="output" class="output" aria-live="polite"></div>
+      <form id="prompt-form" class="prompt-line" autocomplete="off">
+        <span class="prompt" id="prompt-prefix">guest@trent-buckley:~$&nbsp;</span>
+        <span class="input-wrap">
+          <input
+            id="cmd"
+            class="cmd"
+            type="text"
+            spellcheck="false"
+            autocapitalize="off"
+            autocorrect="off"
+            inputmode="text"
+            aria-label="Terminal input"
+          />
+          <span class="caret" aria-hidden="true"></span>
+        </span>
+      </form>
+    </main>
+  </div>
+  <script src="./script.js" defer></script>
+</body>
+</html>
