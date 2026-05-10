@@ -251,6 +251,8 @@
     "  portfolio <id>    show project details (bordertech, prism, payments)",
     "  contact           how to get in touch",
     "  contact reveal    copy email address to clipboard",
+    "  games             list playable games",
+    "  play <game>       launch a game (asteroids, invaders, snake, tetris, 2048, pong, chess, mines)",
     "  whoami            who's there?",
     "  ls                list browseable topics",
     "  cat <topic>       alias for about/portfolio",
@@ -579,6 +581,43 @@
         return typeLines([`opening ${url} ...`]);
       },
     },
+
+    games: {
+      run: () => {
+        if (!window.Games) return typeLines(["{err}games module failed to load"]);
+        const lines = ["{section}Arcade", ""];
+        window.Games.list.forEach((g) => {
+          const id = g.id.padEnd(10);
+          lines.push(`  ${id}${g.title}`);
+          if (g.subtitle) lines.push(`            {muted}${g.subtitle}`);
+        });
+        // {muted} marker only takes effect at the start of a line, so map muted second-lines now
+        lines.push("");
+        lines.push("{muted}run `play <id>` to launch. Esc closes any game.");
+        return typeLines(lines.map(l => l.startsWith("            {muted}") ? l.replace("            {muted}", "            ") : l));
+      },
+    },
+
+    play: {
+      run: (args) => {
+        if (!window.Games) return typeLines(["{err}games module failed to load"]);
+        const id = (args[0] || "").toLowerCase();
+        if (!id) {
+          return typeLines([
+            "usage: play <game>",
+            `available: ${window.Games.list.map(g => g.id).join(", ")}`,
+          ]);
+        }
+        if (!window.Games.byId[id]) {
+          return typeLines([
+            `{err}no game: ${id}`,
+            `available: ${window.Games.list.map(g => g.id).join(", ")}`,
+          ]);
+        }
+        window.Games.launch(id);
+        return typeLines([`{muted}launching ${id}... (Esc to exit)`]);
+      },
+    },
   };
 
   // command aliases
@@ -588,6 +627,16 @@
     "work": ["portfolio"],
     "me": ["about", "trent"],
     "bio": ["about", "trent"],
+    "arcade": ["games"],
+    "asteroids": ["play", "asteroids"],
+    "invaders": ["play", "invaders"],
+    "snake": ["play", "snake"],
+    "tetris": ["play", "tetris"],
+    "2048": ["play", "2048"],
+    "pong": ["play", "pong"],
+    "chess": ["play", "chess"],
+    "mines": ["play", "mines"],
+    "minesweeper": ["play", "mines"],
   };
 
   // ---------- Parser / dispatcher ----------
@@ -657,6 +706,7 @@
       theme: ["green", "amber", "mono"],
       contact: ["reveal"],
       open: ["bordertech"],
+      play: window.Games ? window.Games.list.map(g => g.id) : ["asteroids","invaders","snake","tetris","2048","pong","chess","mines"],
     };
     const list = argTopics[cmd] || [];
     return list.filter(t => t.startsWith(arg.toLowerCase()));
