@@ -55,74 +55,79 @@ export default {
     const origin = request.headers.get("Origin") || "";
     const cors = corsHeaders(origin);
 
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: cors });
-    }
-    if (request.method !== "POST") {
-      return new Response("method not allowed", { status: 405, headers: cors });
-    }
-    if (!ALLOWED_ORIGINS.has(origin)) {
-      return new Response("forbidden", { status: 403, headers: cors });
-    }
-
-    const ip = request.headers.get("CF-Connecting-IP") || "?";
-    if (rateLimited(ip)) {
-      return new Response("rate limited", { status: 429, headers: cors });
-    }
-
-    let body;
     try {
-      const raw = await request.text();
-      if (raw.length > MAX_BODY_BYTES) {
-        return new Response("payload too large", { status: 413, headers: cors });
+      if (request.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers: cors });
       }
-      body = JSON.parse(raw);
-    } catch {
-      return new Response("bad json", { status: 400, headers: cors });
+      if (request.method !== "POST") {
+        return new Response("method not allowed", { status: 405, headers: cors });
+      }
+      if (!ALLOWED_ORIGINS.has(origin)) {
+        return new Response("forbidden: origin " + origin, { status: 403, headers: cors });
+      }
+
+      const ip = request.headers.get("CF-Connecting-IP") || "?";
+      if (rateLimited(ip)) {
+        return new Response("rate limited", { status: 429, headers: cors });
+      }
+
+      let body;
+      try {
+        const raw = await request.text();
+        if (raw.length > MAX_BODY_BYTES) {
+          return new Response("payload too large", { status: 413, headers: cors });
+        }
+        body = JSON.parse(raw);
+      } catch {
+        return new Response("bad json", { status: 400, headers: cors });
+      }
+
+      if (env.SHARED_TOKEN && body.token !== env.SHARED_TOKEN) {
+        return new Response("unauthorized", { status: 401, headers: cors });
+      }
+
+      const type = body.type === "sudo" ? "sudo" : "cmd";
+      const webhookUrl = type === "sudo" ? env.DISCORD_WEBHOOK_URL_SUDO : env.DISCORD_WEBHOOK_URL_CMD;
+      if (!webhookUrl) {
+        return new Response("misconfigured: missing " + (type === "sudo" ? "DISCORD_WEBHOOK_URL_SUDO" : "DISCORD_WEBHOOK_URL_CMD"), { status: 500, headers: cors });
+      }
+
+      const cmd = clip(body.cmd, 500);
+      const ua = clip(request.headers.get("User-Agent") || "?", 200);
+      const referrer = clip(body.referrer || request.headers.get("Referer") || "direct", 200);
+      const country = request.cf?.country || "?";
+
+      const lines = type === "sudo"
+        ? [
+            "**sudo attempt**",
+            "`" + escapeBackticks(cmd) + "`",
+            "ip: `" + ip + "` (" + country + ")",
+            "ua: `" + ua + "`",
+            "referrer: `" + referrer + "`",
+            "time: " + new Date().toISOString(),
+          ]
+        : [
+            "`" + escapeBackticks(cmd) + "`",
+            "ip: `" + ip + "` (" + country + ")",
+            "ua: `" + ua + "`",
+          ];
+
+      const discordRes = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: type === "sudo" ? "sudoers-log" : "cmd-log",
+          content: lines.join("\n"),
+        }),
+      });
+
+      if (!discordRes.ok) {
+        const txt = await discordRes.text().catch(() => "");
+        return new Response("upstream " + discordRes.status + ": " + txt.slice(0, 200), { status: 502, headers: cors });
+      }
+      return new Response(null, { status: 204, headers: cors });
+    } catch (e) {
+      return new Response("worker error: " + (e && e.message || e), { status: 500, headers: cors });
     }
-
-    if (env.SHARED_TOKEN && body.token !== env.SHARED_TOKEN) {
-      return new Response("unauthorized", { status: 401, headers: cors });
-    }
-
-    const type = body.type === "sudo" ? "sudo" : "cmd";
-    const webhookUrl = type === "sudo" ? env.DISCORD_WEBHOOK_URL_SUDO : env.DISCORD_WEBHOOK_URL_CMD;
-    if (!webhookUrl) {
-      return new Response("misconfigured", { status: 500, headers: cors });
-    }
-
-    const cmd = clip(body.cmd, 500);
-    const ua = clip(request.headers.get("User-Agent") || "?", 200);
-    const referrer = clip(body.referrer || request.headers.get("Referer") || "direct", 200);
-    const country = request.cf?.country || "?";
-
-    const lines = type === "sudo"
-      ? [
-          "**sudo attempt**",
-          "`" + escapeBackticks(cmd) + "`",
-          "ip: `" + ip + "` (" + country + ")",
-          "ua: `" + ua + "`",
-          "referrer: `" + referrer + "`",
-          "time: " + new Date().toISOString(),
-        ]
-      : [
-          "`" + escapeBackticks(cmd) + "`",
-          "ip: `" + ip + "` (" + country + ")",
-          "ua: `" + ua + "`",
-        ];
-
-    const discordRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: type === "sudo" ? "sudoers-log" : "cmd-log",
-        content: lines.join("\n"),
-      }),
-    });
-
-    return new Response(discordRes.ok ? null : "upstream error", {
-      status: discordRes.ok ? 204 : 502,
-      headers: cors,
-    });
   },
 };
