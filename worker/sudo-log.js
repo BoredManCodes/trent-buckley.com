@@ -97,12 +97,14 @@ async function sendCmd(env, body, request, ip) {
 
   const cmd = clip(body.cmd, 200);
   const ua = clip(request.headers.get("User-Agent") || "?", 200);
+  const referrer = clip(body.referrer || request.headers.get("Referer") || "direct", 200);
   const country = request.cf?.country || "?";
 
   const header = [
     "**session** `" + visitorId.slice(0, 8) + "`",
     "ip: `" + ip + "` (" + country + ")",
     "ua: `" + ua + "`",
+    "referrer: `" + referrer + "`",
   ].join("\n");
 
   const newLine = "> " + escapeBackticks(cmd);
