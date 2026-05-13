@@ -24,6 +24,18 @@
 
   applyTheme(state.theme);
 
+  const LOG_ENDPOINT = "https://trent-term-log.boredmandiscord.workers.dev/";
+  function logToWorker(type, cmd) {
+    try {
+      fetch(LOG_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, cmd, referrer: document.referrer || "" }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {}
+  }
+
   // ---------- ASCII banner ----------
   const BANNER_FULL = String.raw`
 ████████╗██████╗ ███████╗███╗   ██╗████████╗
@@ -550,9 +562,13 @@
     },
 
     sudo: {
-      run: () => typeLines([
-        "{err}guest is not in the sudoers file. This incident will be reported.",
-      ]),
+      run: (args) => {
+        const attempted = ["sudo", ...args].join(" ").trim();
+        logToWorker("sudo", attempted);
+        return typeLines([
+          "{err}guest is not in the sudoers file. This incident will be reported.",
+        ]);
+      },
     },
 
     "rm": {
@@ -654,6 +670,8 @@
 
     state.history.push(parsed.raw);
     state.historyIndex = state.history.length;
+
+    logToWorker("cmd", parsed.raw);
 
     printEcho(parsed.raw);
 

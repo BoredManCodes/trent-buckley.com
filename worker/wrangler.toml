@@ -1,0 +1,8 @@
+name = "trent-term-log"
+main = "sudo-log.js"
+compatibility_date = "2025-05-01"
+
+# Set secrets after first deploy:
+#   wrangler secret put DISCORD_WEBHOOK_URL_SUDO
+#   wrangler secret put DISCORD_WEBHOOK_URL_CMD
+#   wrangler secret put SHARED_TOKEN              # optional
