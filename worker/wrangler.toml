@@ -2,6 +2,13 @@ name = "trent-term-log"
 main = "sudo-log.js"
 compatibility_date = "2025-05-01"
 
+# KV namespace for per-visitor session state.
+# Create one in the Cloudflare dashboard (Workers & Pages -> KV -> Create namespace),
+# then paste the namespace id below and redeploy.
+[[kv_namespaces]]
+binding = "LOGS"
+id = "c86030ab9c8c4168b24b746a70f20a4f"
+
 # Set secrets after first deploy:
 #   wrangler secret put DISCORD_WEBHOOK_URL_SUDO
 #   wrangler secret put DISCORD_WEBHOOK_URL_CMD

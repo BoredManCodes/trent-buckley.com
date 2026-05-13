@@ -25,12 +25,18 @@
   applyTheme(state.theme);
 
   const LOG_ENDPOINT = "https://trent-term-log.boredmandiscord.workers.dev/";
+  let visitorId = localStorage.getItem("tb.visitorId");
+  if (!visitorId) {
+    visitorId = (crypto.randomUUID && crypto.randomUUID()) ||
+      (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    localStorage.setItem("tb.visitorId", visitorId);
+  }
   function logToWorker(type, cmd) {
     try {
       fetch(LOG_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, cmd, referrer: document.referrer || "" }),
+        body: JSON.stringify({ type, cmd, visitorId, referrer: document.referrer || "" }),
         keepalive: true,
       }).catch(() => {});
     } catch {}

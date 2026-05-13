@@ -1,14 +1,16 @@
 // Cloudflare Worker — proxies terminal logs to Discord webhooks.
 //
-// Supports two event types:
-//   { "type": "sudo", "cmd": "sudo rm -rf /" }   -> DISCORD_WEBHOOK_URL_SUDO
-//   { "type": "cmd",  "cmd": "help" }            -> DISCORD_WEBHOOK_URL_CMD
+// Events:
+//   { "type": "sudo", "cmd": "sudo rm -rf /" }   -> one-shot to DISCORD_WEBHOOK_URL_SUDO
+//   { "type": "cmd",  "cmd": "help", "visitorId": "<uuid>" }
+//        -> per-visitor session message via DISCORD_WEBHOOK_URL_CMD, edited in place
+//           until ~1800 chars, then a new continuation message is started.
 //
-// Deploy:
-//   1. wrangler deploy worker/sudo-log.js --name trent-term-log
-//   2. wrangler secret put DISCORD_WEBHOOK_URL_SUDO
-//   3. wrangler secret put DISCORD_WEBHOOK_URL_CMD
-//   4. (optional) wrangler secret put SHARED_TOKEN  # any random string
+// Bindings required (configure in CF dashboard or wrangler.toml):
+//   - KV namespace bound as `LOGS`
+//   - secret DISCORD_WEBHOOK_URL_SUDO
+//   - secret DISCORD_WEBHOOK_URL_CMD
+//   - (optional) secret SHARED_TOKEN
 
 const ALLOWED_ORIGINS = new Set([
   "https://trent-buckley.com",
@@ -16,9 +18,11 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const MAX_BODY_BYTES = 2048;
-const RATE_LIMIT_PER_MIN = 20; // per IP
+const RATE_LIMIT_PER_MIN = 60;          // per IP
+const SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h of inactivity ends the session
+const DISCORD_CONTENT_LIMIT = 2000;
+const SOFT_LIMIT = 1850;                // leave headroom for the next line
 
-// In-memory bucket per worker isolate. Not global, but good enough for casual abuse.
 const buckets = new Map();
 
 function corsHeaders(origin) {
@@ -48,6 +52,146 @@ function clip(s, n) {
 
 function escapeBackticks(s) {
   return s.replace(/`/g, "ˋ");
+}
+
+function safeVisitorId(s) {
+  return String(s || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 64);
+}
+
+async function sendSudo(env, body, request, ip) {
+  const cmd = clip(body.cmd, 500);
+  const ua = clip(request.headers.get("User-Agent") || "?", 200);
+  const referrer = clip(body.referrer || request.headers.get("Referer") || "direct", 200);
+  const country = request.cf?.country || "?";
+
+  const content = [
+    "**sudo attempt**",
+    "`" + escapeBackticks(cmd) + "`",
+    "ip: `" + ip + "` (" + country + ")",
+    "ua: `" + ua + "`",
+    "referrer: `" + referrer + "`",
+    "time: " + new Date().toISOString(),
+  ].join("\n");
+
+  const res = await fetch(env.DISCORD_WEBHOOK_URL_SUDO, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "sudoers-log", content }),
+  });
+  return res;
+}
+
+function buildSessionContent(header, lines, cont) {
+  const top = cont ? header + " (cont.)" : header;
+  return top + "\n```\n" + lines.join("\n") + "\n```";
+}
+
+async function sendCmd(env, body, request, ip) {
+  const visitorId = safeVisitorId(body.visitorId);
+  if (!visitorId) {
+    return { ok: false, status: 400, message: "missing visitorId" };
+  }
+  if (!env.LOGS) {
+    return { ok: false, status: 500, message: "misconfigured: missing KV binding LOGS" };
+  }
+
+  const cmd = clip(body.cmd, 200);
+  const ua = clip(request.headers.get("User-Agent") || "?", 200);
+  const country = request.cf?.country || "?";
+
+  const header = [
+    "**session** `" + visitorId.slice(0, 8) + "`",
+    "ip: `" + ip + "` (" + country + ")",
+    "ua: `" + ua + "`",
+  ].join("\n");
+
+  const newLine = "> " + escapeBackticks(cmd);
+
+  const key = "v:" + visitorId;
+  const stateRaw = await env.LOGS.get(key);
+  const state = stateRaw ? JSON.parse(stateRaw) : null;
+
+  // No active session -> POST a new message
+  if (!state || !state.messageId) {
+    const content = buildSessionContent(header, [newLine], false);
+    const res = await fetch(env.DISCORD_WEBHOOK_URL_CMD + "?wait=true", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: "session", content }),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { ok: false, status: 502, message: "discord post " + res.status + ": " + txt.slice(0, 200) };
+    }
+    const msg = await res.json();
+    await env.LOGS.put(
+      key,
+      JSON.stringify({ messageId: msg.id, lines: [newLine], cont: false }),
+      { expirationTtl: SESSION_TTL_SECONDS }
+    );
+    return { ok: true };
+  }
+
+  // Try to extend the existing message
+  const candidateLines = [...state.lines, newLine];
+  const candidateContent = buildSessionContent(header, candidateLines, !!state.cont);
+
+  if (candidateContent.length <= SOFT_LIMIT && candidateContent.length <= DISCORD_CONTENT_LIMIT) {
+    const res = await fetch(env.DISCORD_WEBHOOK_URL_CMD + "/messages/" + state.messageId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: candidateContent }),
+    });
+    if (res.status === 404) {
+      // Message was deleted - start fresh
+      const newContent = buildSessionContent(header, [newLine], false);
+      const postRes = await fetch(env.DISCORD_WEBHOOK_URL_CMD + "?wait=true", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "session", content: newContent }),
+      });
+      if (!postRes.ok) {
+        const txt = await postRes.text().catch(() => "");
+        return { ok: false, status: 502, message: "discord repost " + postRes.status + ": " + txt.slice(0, 200) };
+      }
+      const msg = await postRes.json();
+      await env.LOGS.put(
+        key,
+        JSON.stringify({ messageId: msg.id, lines: [newLine], cont: false }),
+        { expirationTtl: SESSION_TTL_SECONDS }
+      );
+      return { ok: true };
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { ok: false, status: 502, message: "discord patch " + res.status + ": " + txt.slice(0, 200) };
+    }
+    await env.LOGS.put(
+      key,
+      JSON.stringify({ messageId: state.messageId, lines: candidateLines, cont: !!state.cont }),
+      { expirationTtl: SESSION_TTL_SECONDS }
+    );
+    return { ok: true };
+  }
+
+  // Overflow -> POST continuation
+  const content = buildSessionContent(header, [newLine], true);
+  const res = await fetch(env.DISCORD_WEBHOOK_URL_CMD + "?wait=true", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "session", content }),
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    return { ok: false, status: 502, message: "discord cont " + res.status + ": " + txt.slice(0, 200) };
+  }
+  const msg = await res.json();
+  await env.LOGS.put(
+    key,
+    JSON.stringify({ messageId: msg.id, lines: [newLine], cont: true }),
+    { expirationTtl: SESSION_TTL_SECONDS }
+  );
+  return { ok: true };
 }
 
 export default {
@@ -87,43 +231,26 @@ export default {
       }
 
       const type = body.type === "sudo" ? "sudo" : "cmd";
-      const webhookUrl = type === "sudo" ? env.DISCORD_WEBHOOK_URL_SUDO : env.DISCORD_WEBHOOK_URL_CMD;
-      if (!webhookUrl) {
-        return new Response("misconfigured: missing " + (type === "sudo" ? "DISCORD_WEBHOOK_URL_SUDO" : "DISCORD_WEBHOOK_URL_CMD"), { status: 500, headers: cors });
+
+      if (type === "sudo") {
+        if (!env.DISCORD_WEBHOOK_URL_SUDO) {
+          return new Response("misconfigured: missing DISCORD_WEBHOOK_URL_SUDO", { status: 500, headers: cors });
+        }
+        const res = await sendSudo(env, body, request, ip);
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          return new Response("upstream " + res.status + ": " + txt.slice(0, 200), { status: 502, headers: cors });
+        }
+        return new Response(null, { status: 204, headers: cors });
       }
 
-      const cmd = clip(body.cmd, 500);
-      const ua = clip(request.headers.get("User-Agent") || "?", 200);
-      const referrer = clip(body.referrer || request.headers.get("Referer") || "direct", 200);
-      const country = request.cf?.country || "?";
-
-      const lines = type === "sudo"
-        ? [
-            "**sudo attempt**",
-            "`" + escapeBackticks(cmd) + "`",
-            "ip: `" + ip + "` (" + country + ")",
-            "ua: `" + ua + "`",
-            "referrer: `" + referrer + "`",
-            "time: " + new Date().toISOString(),
-          ]
-        : [
-            "`" + escapeBackticks(cmd) + "`",
-            "ip: `" + ip + "` (" + country + ")",
-            "ua: `" + ua + "`",
-          ];
-
-      const discordRes = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: type === "sudo" ? "sudoers-log" : "cmd-log",
-          content: lines.join("\n"),
-        }),
-      });
-
-      if (!discordRes.ok) {
-        const txt = await discordRes.text().catch(() => "");
-        return new Response("upstream " + discordRes.status + ": " + txt.slice(0, 200), { status: 502, headers: cors });
+      // type === "cmd"
+      if (!env.DISCORD_WEBHOOK_URL_CMD) {
+        return new Response("misconfigured: missing DISCORD_WEBHOOK_URL_CMD", { status: 500, headers: cors });
+      }
+      const result = await sendCmd(env, body, request, ip);
+      if (!result.ok) {
+        return new Response(result.message, { status: result.status, headers: cors });
       }
       return new Response(null, { status: 204, headers: cors });
     } catch (e) {
