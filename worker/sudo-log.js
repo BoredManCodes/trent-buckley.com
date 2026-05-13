@@ -120,7 +120,7 @@ export default {
       }),
     });
 
-    return new Response(discordRes.ok ? "ok" : "upstream error", {
+    return new Response(discordRes.ok ? null : "upstream error", {
       status: discordRes.ok ? 204 : 502,
       headers: cors,
     });

@@ -881,6 +881,7 @@
     ], { speed: 4, linePause: 60 });
     printBlankLine();
     await printBanner();
+    logToWorker("cmd", "[site loaded]");
     printBlankLine();
     await typeLines([
       "Welcome to trent-buckley.com.",
