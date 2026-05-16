@@ -24,7 +24,7 @@
 
   applyTheme(state.theme);
 
-  const LOG_ENDPOINT = "https://trent-term-log.boredmandiscord.workers.dev/";
+  const LOG_ENDPOINT = "https://trent-term-log.bordertechsolutions.workers.dev/";
   let visitorId = localStorage.getItem("tb.visitorId");
   if (!visitorId) {
     visitorId = (crypto.randomUUID && crypto.randomUUID()) ||
