@@ -311,6 +311,18 @@
     "  - job offers, support requests, or general inquiries",
   ];
 
+  const FORTUNES = [
+    "There are 2 hard problems in computer science: cache invalidation, naming things, and off-by-one errors.",
+    "It works on my machine. Ship the machine.",
+    "99 little bugs in the code, 99 little bugs. Take one down, patch it around. 127 little bugs in the code.",
+    "The best thing about a boolean is even if you are wrong, you are only off by a bit.",
+    "A user interface is like a joke. If you have to explain it, it's not that good.",
+    "Programming is 10% writing code and 90% figuring out why it doesn't work.",
+    "Have you tried turning it off and on again?",
+    "The most disruptive technology of the 21st century is a deadline.",
+    "// TODO: write better fortunes",
+  ];
+
   const HELP = [
     "{section}Available commands",
     "  about <topic>     learn about Trent",
@@ -619,11 +631,124 @@
 
     sudo: {
       run: (args) => {
+        if (args.join(" ").toLowerCase() === "make me a sandwich") {
+          return typeLines(["{accent}okay."]);
+        }
         const attempted = ["sudo", ...args].join(" ").trim();
         logToWorker("sudo", attempted);
         return typeLines([
           "{err}guest is not in the sudoers file. This incident will be reported.",
         ]);
+      },
+    },
+
+    // ---------- Easter eggs (not in help) ----------
+    xyzzy: { run: () => typeLines(["{muted}A hollow voice says 'fool.'"]) },
+
+    hack: {
+      run: async () => {
+        await typeLines([
+          "{accent}INITIATING HACK SEQUENCE...",
+          "{muted}pinging 93.184.216.34................. ok",
+          "{muted}scanning open ports: 22, 80, 443..... ok",
+          "{muted}loading wordlist: rockyou.txt........ ok",
+          "",
+          "{warn}attempting login...",
+          "{warn}  admin:admin            FAIL",
+          "{warn}  root:toor              FAIL",
+          "{warn}  trent:password123      FAIL",
+          "",
+          "{muted}wordlist exhausted. deploying zero-day...",
+          "{err}FileNotFoundError: /usr/share/zero-days: No such file or directory",
+          "",
+          "{muted}hack failed. maybe try `help` instead.",
+        ], { speed: 8, linePause: 55 });
+      },
+    },
+
+    vim: {
+      run: () => typeLines([
+        "",
+        "{muted}~",
+        "{muted}~",
+        "{muted}~",
+        "{muted}~",
+        "{accent}-- INSERT --",
+        "",
+        "{warn}E37: No write since last change (add ! to override)",
+        "{muted}hint: :q is unavailable here. type `clear` to escape.",
+      ], { speed: 6 }),
+    },
+
+    matrix: {
+      run: () => typeLines([
+        "{muted}Wake up, Neo...",
+        "{muted}The Matrix has you.",
+        "{muted}Follow the white rabbit.",
+        "",
+        "{accent}knock knock",
+      ], { speed: 18, linePause: 220 }),
+    },
+
+    coffee: {
+      run: () => typeLines([
+        "    ( (",
+        "     ) )",
+        "  ........",
+        "  |      |]",
+        "  \\      /",
+        "   `----'",
+        "",
+        "{muted}HTCPCP/1.0 418 I'm a Teapot",
+        "{muted}Content-Type: message/coffeepot",
+        "",
+        "{err}error: brew failed. this is a terminal, not a coffee pot.",
+        "{muted}(RFC 2324)",
+      ], { speed: 12 }),
+    },
+
+    fortune: {
+      run: () => {
+        const f = FORTUNES[Math.floor(Math.random() * FORTUNES.length)];
+        return typeLines([`{muted}${f}`]);
+      },
+    },
+
+    reboot: {
+      run: async () => {
+        await typeLines([
+          "{warn}Broadcast message from root@trent-buckley (pts/0):",
+          "{warn}The system is going down for reboot NOW!",
+          "",
+          "{muted}Syncing filesystems...",
+          "{muted}Unmounting filesystems...",
+          "{muted}Sending SIGTERM to all processes...",
+        ], { speed: 10, linePause: 120 });
+        await new Promise(r => setTimeout(r, 700));
+        return typeLines([
+          "",
+          "{muted}just kidding. you can't leave.",
+          "{muted}(try `about trent` instead)",
+        ], { speed: 14 });
+      },
+    },
+
+    nmap: {
+      run: (args) => {
+        const target = args[0] || "trent-buckley.com";
+        return typeLines([
+          "{accent}Starting Nmap 7.94",
+          `{muted}Nmap scan report for ${target}`,
+          "{muted}Host is up (0.011s latency).",
+          "",
+          "{muted}PORT      STATE   SERVICE",
+          "{muted}22/tcp    closed  ssh",
+          "{muted}80/tcp    open    http  (-> 301 https)",
+          "{muted}443/tcp   open    https",
+          "{muted}1337/tcp  open    curiosity",
+          "",
+          "{muted}1 host scanned in 0.38 seconds",
+        ], { speed: 8 });
       },
     },
 
@@ -959,6 +1084,37 @@
     } else {
       document.documentElement.setAttribute("data-theme", name);
     }
+  }
+
+  // ---------- Konami code ----------
+  const KONAMI_SEQ = ["ArrowUp","ArrowUp","ArrowDown","ArrowDown","ArrowLeft","ArrowRight","ArrowLeft","ArrowRight","b","a"];
+  let konamiIdx = 0;
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === KONAMI_SEQ[konamiIdx]) {
+      konamiIdx++;
+      if (konamiIdx === KONAMI_SEQ.length) {
+        konamiIdx = 0;
+        triggerKonami();
+      }
+    } else {
+      konamiIdx = e.key === KONAMI_SEQ[0] ? 1 : 0;
+    }
+  }, true);
+
+  function triggerKonami() {
+    document.documentElement.classList.add("konami-flash");
+    setTimeout(() => document.documentElement.classList.remove("konami-flash"), 700);
+    input.value = "";
+    updateCaret();
+    typeLines([
+      "{accent}↑ ↑ ↓ ↓ ← → ← → B A",
+      "",
+      "{accent}+30 LIVES",
+      "{muted}cheat code accepted.",
+      "{muted}god mode: ON",
+      "{muted}(this changes absolutely nothing)",
+    ], { speed: 14 });
   }
 
   // ---------- Init ----------

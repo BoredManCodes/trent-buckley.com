@@ -622,3 +622,16 @@ a:hover { text-decoration-style: solid; }
   .chess-side { width: 100%; max-width: none; }
   .chess-history { max-height: 30vh; min-height: 60px; }
 }
+
+/* ==================== easter eggs ==================== */
+@keyframes konami-flash {
+  0%   { filter: brightness(1) hue-rotate(0deg); }
+  15%  { filter: brightness(2.5) saturate(2) hue-rotate(60deg); }
+  35%  { filter: brightness(1.8) hue-rotate(140deg); }
+  55%  { filter: brightness(2.2) hue-rotate(230deg); }
+  75%  { filter: brightness(1.6) hue-rotate(310deg); }
+  100% { filter: brightness(1) hue-rotate(360deg); }
+}
+html.konami-flash .crt {
+  animation: konami-flash 0.7s ease-out forwards;
+}
