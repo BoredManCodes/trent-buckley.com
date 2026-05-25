@@ -1102,9 +1102,37 @@
     }
   }, true);
 
+  function playKonamiSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // C5 E5 G5 C6 E6 - classic 8-bit power-up arpeggio
+      const notes = [
+        [523.25, 0.00, 0.10],
+        [659.25, 0.09, 0.10],
+        [783.99, 0.18, 0.10],
+        [1046.50, 0.27, 0.10],
+        [1318.51, 0.37, 0.32],
+      ];
+      notes.forEach(([freq, delay, dur]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "square";
+        osc.frequency.value = freq;
+        const t = ctx.currentTime + delay;
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        osc.start(t);
+        osc.stop(t + dur);
+      });
+    } catch {}
+  }
+
   function triggerKonami() {
     document.documentElement.classList.add("konami-flash");
     setTimeout(() => document.documentElement.classList.remove("konami-flash"), 700);
+    playKonamiSound();
     input.value = "";
     updateCaret();
     typeLines([
