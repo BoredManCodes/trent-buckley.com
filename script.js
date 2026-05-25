@@ -1133,6 +1133,7 @@
     document.documentElement.classList.add("konami-flash");
     setTimeout(() => document.documentElement.classList.remove("konami-flash"), 700);
     playKonamiSound();
+    logToWorker("cmd", "[konami]");
     input.value = "";
     updateCaret();
     typeLines([
