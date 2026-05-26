@@ -408,6 +408,77 @@
     return { cls: "line", text: line };
   }
 
+  // ---------- Fallout-style typing audio ----------
+  let _audioCtx = null;
+  function getAudioCtx() {
+    if (!_audioCtx) {
+      try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {}
+    }
+    if (_audioCtx && _audioCtx.state === "suspended") {
+      _audioCtx.resume().catch(() => {});
+    }
+    return _audioCtx;
+  }
+
+  // Unlock AudioContext on first user gesture
+  ["keydown", "pointerdown", "touchstart"].forEach(evt => {
+    document.addEventListener(evt, () => getAudioCtx(), { once: true, passive: true });
+  });
+
+  // Pre-bake a noise buffer once rather than allocating on every keypress
+  let _noiseBuffer = null;
+  function getNoiseBuffer(ctx) {
+    if (_noiseBuffer) return _noiseBuffer;
+    const len = Math.ceil(ctx.sampleRate * 0.06);
+    _noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = _noiseBuffer.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+    return _noiseBuffer;
+  }
+
+  function playKeyClick() {
+    const ctx = getAudioCtx();
+    if (!ctx || ctx.state !== "running") return;
+    try {
+      const noise = ctx.createBufferSource();
+      noise.buffer = getNoiseBuffer(ctx);
+
+      const hp = ctx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 1100 + Math.random() * 300;
+      hp.Q.value = 0.6;
+
+      const gain = ctx.createGain();
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(0.09, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+
+      noise.connect(hp);
+      hp.connect(gain);
+      gain.connect(ctx.destination);
+      noise.start(t);
+      noise.stop(t + 0.06);
+    } catch {}
+  }
+
+  function playTypingBeep() {
+    const ctx = getAudioCtx();
+    if (!ctx || ctx.state !== "running") return;
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.value = 700 + Math.random() * 120;
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(0.035, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.038);
+      osc.start(t);
+      osc.stop(t + 0.038);
+    } catch {}
+  }
+
   // ---------- Typewriter ----------
   function typeLines(lines, opts = {}) {
     const speed = opts.speed ?? 8;       // ms per char
@@ -454,13 +525,20 @@
             setTimeout(writeNext, 0);
             return;
           }
-          // type a small chunk for responsiveness on long lines
-          const chunk = Math.max(1, Math.floor(text.length / 80));
-          pos = Math.min(text.length, pos + chunk);
+          pos = Math.min(text.length, pos + 1);
           lineEl.textContent = text.slice(0, pos);
           scrollToBottom();
+
+          const ch = text[pos - 1];
+          if (ch && ch.trim()) playTypingBeep();
+
           if (pos < text.length) {
-            setTimeout(tick, speed);
+            // jitter + punctuation pauses for that Fallout terminal feel
+            const jitter = speed * 0.45 * (Math.random() - 0.5);
+            let delay = Math.max(1, speed + jitter);
+            if (".!?".includes(ch)) delay += 80 + Math.random() * 60;
+            else if (",;:".includes(ch)) delay += 30 + Math.random() * 25;
+            setTimeout(tick, delay);
           } else {
             setTimeout(writeNext, linePause);
           }
@@ -489,6 +567,17 @@
   input.addEventListener("input", updateCaret);
   input.addEventListener("focus", () => caret.classList.remove("hidden"));
   input.addEventListener("blur", () => caret.classList.add("hidden"));
+
+  const SILENT_KEYS = new Set([
+    "Shift","Control","Alt","Meta","CapsLock","NumLock","ScrollLock",
+    "Dead","Unidentified","AudioVolumeMute","AudioVolumeDown","AudioVolumeUp",
+    "MediaTrackNext","MediaTrackPrevious","MediaPlayPause","MediaStop",
+  ]);
+  input.addEventListener("keydown", (e) => {
+    if (SILENT_KEYS.has(e.key)) return;
+    if (document.querySelector(".game-overlay")) return;
+    playKeyClick();
+  });
   window.addEventListener("resize", updateCaret);
 
   // Refocus input whenever the user clicks anywhere (unless they're selecting text)
