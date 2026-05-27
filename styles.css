@@ -635,3 +635,68 @@ a:hover { text-decoration-style: solid; }
 html.konami-flash .crt {
   animation: konami-flash 0.7s ease-out forwards;
 }
+
+/* ==================== boot splash ==================== */
+#boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: radial-gradient(1200px 800px at 50% 20%, #0a1410 0%, #050807 60%, #020403 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+#boot-splash::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  z-index: 1;
+}
+#boot-splash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%);
+  z-index: 1;
+}
+.boot-msg {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: clamp(13px, 1.05vw + 9px, 16px);
+  text-shadow: var(--glow);
+  letter-spacing: 0.05em;
+}
+.boot-msg a {
+  color: var(--accent);
+  text-decoration: none;
+  padding: 1px 5px;
+  border: 1px solid var(--accent);
+  border-radius: 2px;
+  animation: blink 1.05s steps(2, start) infinite;
+}
+.boot-msg a:hover {
+  background: var(--accent-soft);
+  animation: none;
+}
+#boot-splash.fade-out {
+  animation: splash-fade 0.35s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes splash-fade {
+  to { opacity: 0; }
+}

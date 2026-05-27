@@ -1237,9 +1237,36 @@
 
   // ---------- Init ----------
   window.addEventListener("load", () => {
-    input.focus();
-    updateCaret();
-    bootSequence();
+    const splash = document.getElementById("boot-splash");
+    const anyKeyLink = document.getElementById("any-key-link");
+
+    function dismissSplash() {
+      if (!splash || splash.classList.contains("fade-out")) return;
+      // Counts as a user gesture — unlock the AudioContext now so sounds
+      // play immediately when the boot sequence starts typing.
+      getAudioCtx();
+      splash.classList.add("fade-out");
+      splash.addEventListener("animationend", () => {
+        splash.remove();
+        input.focus();
+        updateCaret();
+        bootSequence();
+      }, { once: true });
+    }
+
+    // Physical key press → boot
+    window.addEventListener("keydown", dismissSplash, { once: true });
+
+    // Click anywhere on the splash except the link itself → boot
+    splash.addEventListener("pointerdown", (e) => {
+      if (e.target === anyKeyLink || e.target.closest("#any-key-link")) return;
+      dismissSplash();
+    });
+
+    // Clicking the "any key" link opens YouTube AND boots
+    anyKeyLink.addEventListener("click", () => {
+      setTimeout(dismissSplash, 80);
+    });
   });
 
   // Friendly fallback if focus is lost on touch devices
