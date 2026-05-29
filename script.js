@@ -20,6 +20,7 @@
     skipRequested: false,
     booted: false,
     theme: localStorage.getItem("tb.theme") || "green",
+    elizaSession: null,     // active ElizaBot instance
   };
 
   applyTheme(state.theme);
@@ -333,6 +334,7 @@
     "  contact reveal    copy email address to clipboard",
     "  games             list playable games",
     "  play <game>       launch a game (asteroids, invaders, snake, tetris, 2048, pong, chess, mines)",
+    "  eliza             talk to ELIZA (Weizenbaum, 1966) · type 'quit' to end",
     "  whoami            who's there?",
     "  ls                list browseable topics",
     "  cat <topic>       alias for about/portfolio",
@@ -906,6 +908,30 @@
         return typeLines([`{muted}launching ${id}... (Esc to exit)`]);
       },
     },
+
+    eliza: {
+      run: () => {
+        if (!window.ElizaBot) {
+          return typeLines(["{err}eliza module failed to load"]);
+        }
+        if (state.elizaSession) {
+          return typeLines(["{muted}already in session. type 'quit' to end."]);
+        }
+        state.elizaSession = new ElizaBot();
+        const greeting = state.elizaSession.getInitial();
+        printBlankLine();
+        const greetEl = document.createElement("div");
+        greetEl.className = "line";
+        const greetLabel = document.createElement("span");
+        greetLabel.className = "accent";
+        greetLabel.textContent = "ELIZA: ";
+        greetEl.appendChild(greetLabel);
+        greetEl.appendChild(document.createTextNode(greeting));
+        output.appendChild(greetEl);
+        terminal.scrollTop = terminal.scrollHeight;
+        return typeLines(["{muted}(type 'quit' to end the session)"]);
+      },
+    },
   };
 
   // command aliases
@@ -1031,6 +1057,28 @@
       printEcho("");
       return;
     }
+
+    // Route to ELIZA when a session is active
+    if (state.elizaSession) {
+      printEcho(value);
+      const response = state.elizaSession.transform(value);
+      const div = document.createElement("div");
+      div.className = "line";
+      const label = document.createElement("span");
+      label.className = "accent";
+      label.textContent = "ELIZA: ";
+      div.appendChild(label);
+      div.appendChild(document.createTextNode(response));
+      output.appendChild(div);
+      terminal.scrollTop = terminal.scrollHeight;
+      if (state.elizaSession.quit) {
+        state.elizaSession = null;
+        printBlankLine();
+        printText("{muted}[session ended]", "line muted");
+      }
+      return;
+    }
+
     await runCommand(value);
   });
 
