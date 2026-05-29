@@ -1061,7 +1061,9 @@
     // Route to ELIZA when a session is active
     if (state.elizaSession) {
       printEcho(value);
+      logToWorker("cmd", "[eliza] " + value);
       const response = state.elizaSession.transform(value);
+      logToWorker("cmd", "[ELIZA] " + response);
       const div = document.createElement("div");
       div.className = "line";
       const label = document.createElement("span");
