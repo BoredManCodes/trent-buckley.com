@@ -6,6 +6,97 @@
 (() => {
   "use strict";
 
+  // ---------- Shared game audio (Web Audio API, no files) ----------
+  const GameAudio = (() => {
+    function ac() {
+      let c = window._gameAC;
+      if (!c) {
+        try { c = window._gameAC = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
+      }
+      if (c.state === "suspended") c.resume().catch(() => {});
+      return c.state === "running" ? c : null;
+    }
+
+    let _noiseBuf = null;
+    function noiseBuf(c) {
+      if (_noiseBuf) return _noiseBuf;
+      const len = Math.ceil(c.sampleRate * 0.6);
+      _noiseBuf = c.createBuffer(1, len, c.sampleRate);
+      const d = _noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      return _noiseBuf;
+    }
+
+    function bang(c, dur, vol, hp) {
+      try {
+        const src = c.createBufferSource(); src.buffer = noiseBuf(c);
+        const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = hp || 300;
+        const g = c.createGain();
+        const t = c.currentTime;
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        src.connect(f); f.connect(g); g.connect(c.destination);
+        src.start(t); src.stop(t + dur);
+      } catch {}
+    }
+
+    function tone(c, type, freq, start, dur, vol) {
+      try {
+        const o = c.createOscillator(); const g = c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.type = type; o.frequency.value = freq;
+        const t = c.currentTime + start;
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.start(t); o.stop(t + dur);
+      } catch {}
+    }
+
+    function sweep(c, type, f0, f1, dur, vol) {
+      try {
+        const o = c.createOscillator(); const g = c.createGain();
+        o.connect(g); g.connect(c.destination);
+        o.type = type;
+        const t = c.currentTime;
+        o.frequency.setValueAtTime(f0, t);
+        o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+        g.gain.setValueAtTime(vol, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+        o.start(t); o.stop(t + dur);
+      } catch {}
+    }
+
+    return {
+      playerShoot()       { const c = ac(); if (!c) return; sweep(c, "square", 1100, 500, 0.08, 0.1); },
+      asteroidExplode(big){ const c = ac(); if (!c) return; bang(c, big ? 0.35 : 0.18, big ? 0.28 : 0.18, big ? 80 : 220); },
+      playerDie()         { const c = ac(); if (!c) return; [440,370,311,261,220].forEach((f,i) => tone(c,"sawtooth",f,i*0.07,0.12,0.13)); },
+      hyperspace()        { const c = ac(); if (!c) return; sweep(c,"sine",200,1400,0.12,0.12); sweep(c,"sine",1400,200,0.12,0.09); },
+      eatFood()           { const c = ac(); if (!c) return; tone(c,"square",660,0,0.05,0.1); tone(c,"square",990,0.04,0.06,0.08); },
+      snakeDie()          { const c = ac(); if (!c) return; sweep(c,"sawtooth",300,80,0.35,0.18); },
+      pieceLock()         { const c = ac(); if (!c) return; bang(c,0.06,0.12,700); tone(c,"sine",160,0,0.08,0.14); },
+      lineClear(n)        { const c = ac(); if (!c) return; [523,659,784,1047,1319].slice(0,n+1).forEach((f,i) => tone(c,"square",f,i*0.055,0.14,n===4?0.18:0.12)); },
+      hardDrop()          { const c = ac(); if (!c) return; bang(c,0.07,0.18,350); tone(c,"sine",110,0,0.09,0.18); },
+      tileSlide()         { const c = ac(); if (!c) return; bang(c,0.035,0.05,900); },
+      tileMerge(v)        { const c = ac(); if (!c) return; const f = Math.min(220*Math.pow(2,Math.log2(v||2)*2/12),1760); tone(c,"sine",f,0,0.12,0.14); tone(c,"sine",f*1.5,0.05,0.09,0.1); },
+      paddleHit()         { const c = ac(); if (!c) return; tone(c,"square",480,0,0.05,0.14); },
+      wallBounce()        { const c = ac(); if (!c) return; tone(c,"square",320,0,0.04,0.09); },
+      pongScore()         { const c = ac(); if (!c) return; tone(c,"square",880,0,0.07,0.12); tone(c,"square",1108,0.05,0.09,0.1); },
+      pongWin()           { const c = ac(); if (!c) return; [523,659,784,1047].forEach((f,i) => tone(c,"square",f,i*0.09,0.14,0.15)); },
+      chessMove()         { const c = ac(); if (!c) return; bang(c,0.05,0.09,1200); },
+      chessCapture()      { const c = ac(); if (!c) return; bang(c,0.1,0.2,450); tone(c,"sine",130,0,0.1,0.16); },
+      chessCheck()        { const c = ac(); if (!c) return; tone(c,"square",880,0,0.08,0.14); tone(c,"square",880,0.14,0.08,0.11); },
+      invaderDie()        { const c = ac(); if (!c) return; bang(c,0.14,0.18,320); },
+      invaderMarch(beat)  { const c = ac(); if (!c) return; tone(c,"square",[160,130,110,130][beat],0,0.06,0.09); },
+      ufoHit()            { const c = ac(); if (!c) return; bang(c,0.28,0.22,120); sweep(c,"sawtooth",600,150,0.28,0.14); },
+      invadersPlayerDie() { const c = ac(); if (!c) return; bang(c,0.45,0.28,80); sweep(c,"sawtooth",180,60,0.45,0.18); },
+      msReveal()          { const c = ac(); if (!c) return; bang(c,0.03,0.05,1400); },
+      msFlag()            { const c = ac(); if (!c) return; tone(c,"sine",880,0,0.04,0.08); },
+      msMine()            { const c = ac(); if (!c) return; bang(c,0.55,0.38,60); sweep(c,"sawtooth",140,50,0.5,0.22); },
+      gameOver()          { const c = ac(); if (!c) return; [440,370,311,261].forEach((f,i) => tone(c,"sawtooth",f,i*0.14,0.2,0.16)); },
+      gameWin()           { const c = ac(); if (!c) return; [523,659,784,1047,1319].forEach((f,i) => tone(c,"square",f,i*0.07,0.14,0.14)); },
+    };
+  })();
+
   const Games = (window.Games = {
     list: [],
     byId: {},
@@ -197,6 +288,7 @@
           vy: s.vy + Math.sin(s.a) * 7,
           life: 60,
         });
+        GameAudio.playerShoot();
       }
 
       function hyperspace() {
@@ -205,6 +297,7 @@
         state.ship.y = Math.random() * H;
         state.ship.vx = state.ship.vy = 0;
         state.hyperspaceCooldown = 180;
+        GameAudio.hyperspace();
       }
 
       function explode(x, y, n = 16, color) {
@@ -271,6 +364,7 @@
             state.ship = newShip();
           } else if (state.respawnTimer <= 0 && state.lives <= 0) {
             state.gameOver = true;
+            GameAudio.gameOver();
           }
         }
 
@@ -299,6 +393,7 @@
               state.bullets.splice(i, 1);
               state.asteroids.splice(j, 1);
               explode(a.x, a.y, 10);
+              GameAudio.asteroidExplode(a.size === 3);
               state.score += a.size === 3 ? 20 : a.size === 2 ? 50 : 100;
               if (a.size > 1) {
                 for (let k = 0; k < 2; k++) {
@@ -318,6 +413,7 @@
               state.lives--;
               state.respawnTimer = 90;
               explode(s.x, s.y, 30, getAccent());
+              GameAudio.playerDie();
               break;
             }
           }
@@ -488,6 +584,7 @@
         if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS ||
             state.snake.some((s) => s.x === head.x && s.y === head.y)) {
           state.gameOver = true;
+          GameAudio.snakeDie();
           if (state.score > state.best) {
             state.best = state.score;
             localStorage.setItem("tb.snake.best", state.best);
@@ -497,6 +594,7 @@
         state.snake.unshift(head);
         if (head.x === state.food.x && head.y === state.food.y) {
           state.score++;
+          GameAudio.eatFood();
           if (state.score % 5 === 0 && state.speed < 18) state.speed++;
           state.food = placeFood();
         } else {
@@ -644,14 +742,18 @@
           state.lines += cleared;
           state.score += [0, 100, 300, 500, 800][cleared] * state.level;
           state.level = 1 + Math.floor(state.lines / 10);
+          GameAudio.lineClear(cleared);
+        } else {
+          GameAudio.pieceLock();
         }
         state.piece = state.next;
         state.next = newPiece();
-        if (collides(state.piece, 0, 0)) state.over = true;
+        if (collides(state.piece, 0, 0)) { state.over = true; GameAudio.gameOver(); }
       }
 
       function hardDrop() {
         while (!collides(state.piece, 0, 1)) state.piece.y++;
+        GameAudio.hardDrop();
         lock();
       }
 
@@ -806,11 +908,13 @@
         const [x,y] = empties[Math.floor(Math.random() * empties.length)];
         state.grid[y][x] = Math.random() < 0.9 ? 2 : 4;
       }
+      let _mergedVal = 0;
       function slide(row) {
         const arr = row.filter(Boolean);
         for (let i = 0; i < arr.length - 1; i++) {
           if (arr[i] === arr[i+1]) {
             arr[i] *= 2; state.score += arr[i];
+            _mergedVal = Math.max(_mergedVal, arr[i]);
             if (arr[i] === 2048) state.won = true;
             arr.splice(i+1, 1);
           }
@@ -819,6 +923,7 @@
         return arr;
       }
       function move(dir) {
+        _mergedVal = 0;
         const before = JSON.stringify(state.grid);
         if (dir === "left") {
           state.grid = state.grid.map(slide);
@@ -843,7 +948,12 @@
             state.best = state.score;
             localStorage.setItem("tb.2048.best", state.best);
           }
+          const hadWon = state.won;
           checkOver();
+          if (!hadWon && state.won) GameAudio.gameWin();
+          else if (state.over) GameAudio.gameOver();
+          else if (_mergedVal) GameAudio.tileMerge(_mergedVal);
+          else GameAudio.tileSlide();
           render();
         }
       }
@@ -961,8 +1071,8 @@
         // ball
         const b = state.ball;
         b.x += b.vx; b.y += b.vy;
-        if (b.y < b.r) { b.y = b.r; b.vy *= -1; }
-        if (b.y > H - b.r) { b.y = H - b.r; b.vy *= -1; }
+        if (b.y < b.r) { b.y = b.r; b.vy *= -1; GameAudio.wallBounce(); }
+        if (b.y > H - b.r) { b.y = H - b.r; b.vy *= -1; GameAudio.wallBounce(); }
         // collide paddles
         function hits(p) {
           return b.x - b.r < p.x + p.w && b.x + b.r > p.x &&
@@ -971,15 +1081,17 @@
         if (hits(state.p) && b.vx < 0) {
           b.vx = Math.abs(b.vx) + 0.4;
           b.vy += ((b.y - (state.p.y + state.p.h/2)) / (state.p.h/2)) * 3;
+          GameAudio.paddleHit();
         }
         if (hits(state.ai) && b.vx > 0) {
           b.vx = -Math.abs(b.vx) - 0.4;
           b.vy += ((b.y - (state.ai.y + state.ai.h/2)) / (state.ai.h/2)) * 3;
+          GameAudio.paddleHit();
         }
-        if (b.x < -20) { state.ai.score++; resetBall(false); }
-        else if (b.x > W + 20) { state.p.score++; resetBall(true); }
-        if (state.p.score >= 11) state.over = "YOU WIN";
-        else if (state.ai.score >= 11) state.over = "CPU WINS";
+        if (b.x < -20) { state.ai.score++; resetBall(false); GameAudio.pongScore(); }
+        else if (b.x > W + 20) { state.p.score++; resetBall(true); GameAudio.pongScore(); }
+        if (state.p.score >= 11) { state.over = "YOU WIN"; GameAudio.pongWin(); }
+        else if (state.ai.score >= 11) { state.over = "CPU WINS"; GameAudio.gameOver(); }
       }
 
       function draw() {
@@ -1495,6 +1607,8 @@
 
         // SAN
         let san = makeSAN(fromX, fromY, m, piece, capturedBefore);
+        if (capturedBefore || m.enPassant) GameAudio.chessCapture();
+        else GameAudio.chessMove();
 
         // switch turn
         state.turn = state.turn === "w" ? "b" : "w";
@@ -1503,10 +1617,10 @@
         const opponent = state.turn;
         const oppMoves = allLegal(opponent);
         if (inCheck(state.grid, opponent)) {
-          if (!oppMoves.length) { san += "#"; state.result = `${piece[0] === "w" ? "WHITE" : "BLACK"} wins by checkmate`; }
-          else san += "+";
+          if (!oppMoves.length) { san += "#"; state.result = `${piece[0] === "w" ? "WHITE" : "BLACK"} wins by checkmate`; GameAudio.gameOver(); }
+          else { san += "+"; GameAudio.chessCheck(); }
         } else if (!oppMoves.length) {
-          state.result = "draw by stalemate";
+          state.result = "draw by stalemate"; GameAudio.gameOver();
         }
 
         state.history.push({ san, prev, color: piece[0], num: prev.fullmove });
@@ -1715,7 +1829,7 @@
         bullets: [],
         bombs: [],
         invaders: [],
-        invDir: 1, invStepTimer: 0, invStepInterval: 28, invFrame: 0,
+        invDir: 1, invStepTimer: 0, invStepInterval: 28, invFrame: 0, invMarchBeat: 0,
         ufo: null, ufoTimer: 600 + Math.random() * 600,
         bunkers: [],
         score: 0, lives: 3, wave: 1,
@@ -1761,7 +1875,7 @@
         state.player.x = W/2; state.player.y = H - 50; state.player.cooldown = 0;
         state.bullets = []; state.bombs = []; state.particles = [];
         state.invaders = spawnInvaders(state.wave);
-        state.invDir = 1; state.invStepTimer = 0; state.invStepInterval = 28;
+        state.invDir = 1; state.invStepTimer = 0; state.invStepInterval = 28; state.invMarchBeat = 0;
         state.ufo = null; state.ufoTimer = 600 + Math.random() * 600;
         state.bunkers = [makeBunker(120), makeBunker(310), makeBunker(500), makeBunker(680)];
         state.over = false; state.won = false;
@@ -1791,6 +1905,7 @@
         if (state.bullets.length >= 2) return; // classic single-shot feel
         state.bullets.push({ x: state.player.x, y: state.player.y - 12, vy: -8 });
         state.player.cooldown = 14;
+        GameAudio.playerShoot();
       }
 
       function explodeAt(x, y, n, color) {
@@ -1838,6 +1953,8 @@
         if (state.invStepTimer >= interval) {
           state.invStepTimer = 0;
           state.invFrame ^= 1;
+          state.invMarchBeat = (state.invMarchBeat + 1) % 4;
+          GameAudio.invaderMarch(state.invMarchBeat);
           // determine if any alive invader hits the wall
           const alive = aliveInvaders();
           let drop = false;
@@ -1888,6 +2005,7 @@
               state.bullets.splice(i, 1);
               state.score += inv.points;
               explodeAt(inv.x + INV_W/2, inv.y + INV_H/2, 8, "#9ce37d");
+              GameAudio.invaderDie();
               break;
             }
           }
@@ -1899,6 +2017,7 @@
             if (b.x > state.ufo.x - 18 && b.x < state.ufo.x + 18 && b.y > state.ufo.y - 8 && b.y < state.ufo.y + 12) {
               state.score += state.ufo.points;
               explodeAt(state.ufo.x, state.ufo.y, 16, "#ff7a90");
+              GameAudio.ufoHit();
               state.ufo = null;
               state.ufoTimer = 800 + Math.random() * 700;
               state.bullets.splice(i, 1);
@@ -1951,7 +2070,8 @@
             state.lives--;
             state.flash = 30;
             explodeAt(state.player.x, state.player.y, 24, "#4afa7b");
-            if (state.lives <= 0) state.over = true;
+            GameAudio.invadersPlayerDie();
+            if (state.lives <= 0) { state.over = true; GameAudio.gameOver(); }
             break;
           }
         }
@@ -1960,6 +2080,7 @@
         for (const inv of aliveInvaders()) {
           if (inv.y + INV_H >= state.player.y - 8) {
             state.over = true; state.flash = 60;
+            GameAudio.gameOver();
             break;
           }
         }
@@ -2160,11 +2281,18 @@
           if (!state.revealed[y][x]) {
             state.flagged[y][x] = !state.flagged[y][x];
             state.flags += state.flagged[y][x] ? 1 : -1;
+            GameAudio.msFlag();
           }
         } else {
           if (!state.started) plant(x, y);
           reveal(x, y);
-          checkWin();
+          if (state.over) {
+            GameAudio.msMine();
+          } else {
+            GameAudio.msReveal();
+            checkWin();
+            if (state.won) GameAudio.gameWin();
+          }
         }
         render();
       }
